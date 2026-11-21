@@ -42,25 +42,18 @@ except Exception as e:
     st.stop()
 
 class_names = model.names  # dict {id: nombre}
-class_options = list(class_names.values())
 
+PERSON_KEYWORDS = ("person", "persona", "humano")
+PHONE_KEYWORDS = ("cell phone", "phone", "celular", "mobile", "telefono", "teléfono")
 
-def find_default_index(options, candidates):
-    for idx, name in enumerate(options):
-        low = name.strip().lower()
-        if any(c in low for c in candidates):
-            return idx
-    return 0
-
-
-default_person_idx = find_default_index(class_options, ["person", "persona", "humano"])
-default_phone_idx = find_default_index(class_options, ["cell phone", "phone", "celular", "mobile", "telefono", "teléfono"])
-
-person_label = st.sidebar.selectbox("Clase Persona", options=class_options, index=default_person_idx)
-phone_label = st.sidebar.selectbox("Clase Celular", options=class_options, index=default_phone_idx)
-
-person_ids = [cid for cid, name in class_names.items() if name == person_label]
-phone_ids = [cid for cid, name in class_names.items() if name == phone_label]
+person_ids = [
+    cid for cid, name in class_names.items()
+    if any(k in str(name).strip().lower() for k in PERSON_KEYWORDS)
+]
+phone_ids = [
+    cid for cid, name in class_names.items()
+    if any(k in str(name).strip().lower() for k in PHONE_KEYWORDS)
+]
 target_ids = list(set(person_ids + phone_ids))
 
 
