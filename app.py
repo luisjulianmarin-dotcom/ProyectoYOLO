@@ -10,22 +10,21 @@ st.set_page_config(page_title="Proyecto Aprendizaje Automático", page_icon="�
 st.caption("Integrantes: Mayra Castañeda - Andres Torres - Julián Marin")
 
 st.title("Identificación de Objetos: Persona, Celular y Gorras")
-st.caption("El proyecto detecta cuando el bounding box de un celular se intersecta o se ubica dentro del bounding box de una persona.")
+st.caption("El proyecto genera una alerta 🚨 cuando el bounding box de un celular se intersecta o se ubica dentro del bounding box de una persona.")
 
 # Sidebar de configuración
 st.sidebar.header("Configuración del Modelo")
 model_path = st.sidebar.text_input("Ruta o nombre del modelo (.pt)", value="best.pt")
-conf_threshold = st.sidebar.slider("Umbral de confianza", 0.10, 0.95, 0.40, 0.05)
+conf_threshold = st.sidebar.slider("Umbral de confianza (conf)", 0.10, 0.95, 0.40, 0.05)
 img_size = st.sidebar.selectbox("Tamaño de inferencia (imgsz)", [320, 480, 640], index=1)
 
-st.sidebar.header("Configuración de Intersección")
 min_overlap_ratio = st.sidebar.slider(
     "Solapamiento mínimo del celular (%)",
     min_value=0,
     max_value=80,
     value=5,
     step=5,
-    help="Porcentaje del área del celular que debe intersectar con la persona (0% = cualquier toque de bordes).",
+    help="Porcentaje del área del celular que debe intersectar con la persona (0% = cualquier intersección).",
 )
 
 
@@ -79,50 +78,29 @@ def intersection_box(box_a, box_b):
     return [x1, y1, x2, y2]
 
 
-def center_inside(inner_box, outer_box):
-    cx = 0.5 * (inner_box[0] + inner_box[2])
-    cy = 0.5 * (inner_box[1] + inner_box[3])
-    return (outer_box[0] <= cx <= outer_box[2]) and (outer_box[1] <= cy <= outer_box[3])
-
-
-def is_box_inside(inner_box, outer_box):
-    return (
-        inner_box[0] >= outer_box[0]
-        and inner_box[1] >= outer_box[1]
-        and inner_box[2] <= outer_box[2]
-        and inner_box[3] <= outer_box[3]
-    )
-
-
-def check_interaction(person_box, phone_box, rule_name: str, min_phone_overlap_frac: float):
+def check_intersection(person_box, phone_box, min_phone_overlap_frac: float):
     inter = intersection_box(person_box, phone_box)
+    if inter is None:
+        return False, None
+
     phone_area = box_area(phone_box)
     if phone_area <= 0:
         return False, None
 
-    inter_area = box_area(inter) if inter is not None else 0.0
+    inter_area = box_area(inter)
     phone_overlap_frac = inter_area / phone_area
-
-    has_any_overlap = inter is not None and phone_overlap_frac >= min_phone_overlap_frac
-    inside_full = is_box_inside(phone_box, person_box)
-    inside_center = center_inside(phone_box, person_box)
-
-    matched = has_any_overlap
-    matched = inside_center and (phone_overlap_frac >= min_phone_overlap_frac)
-    matched = has_any_overlap or inside_full or inside_center
-
+    matched = phone_overlap_frac >= min_phone_overlap_frac
     return matched, inter
 
 
 class YOLOAlertProcessor(VideoProcessorBase):
-    def __init__(self, yolo_model, conf: float, imgsz: int, p_ids, ph_ids, f_ids, rule: str, min_frac: float):
+    def __init__(self, yolo_model, conf: float, imgsz: int, p_ids, ph_ids, f_ids, min_frac: float):
         self.model = yolo_model
         self.conf = conf
         self.imgsz = imgsz
         self.person_ids = set(p_ids)
         self.phone_ids = set(ph_ids)
         self.filter_ids = f_ids if f_ids else None
-        self.rule = rule
         self.min_frac = min_frac
 
         self._lock = threading.Lock()
@@ -164,10 +142,9 @@ class YOLOAlertProcessor(VideoProcessorBase):
         pairs_matched = 0
         for p_box in person_boxes:
             for ph_box in phone_boxes:
-                matched, inter = check_interaction(p_box, ph_box, self.rule, self.min_frac)
+                matched, inter = check_intersection(p_box, ph_box, self.min_frac)
                 if matched:
                     pairs_matched += 1
-                    # Resaltar zona de intersección en rojo brillante
                     if inter is not None:
                         x1, y1, x2, y2 = map(int, inter)
                         cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 0, 255), 3)
@@ -216,20 +193,18 @@ ctx = webrtc_streamer(
         p_ids=person_ids,
         ph_ids=phone_ids,
         f_ids=target_ids if target_ids else None,
-        rule=mode_rule,
         min_frac=min_overlap_ratio / 100.0,
     ),
     media_stream_constraints={"video": True, "audio": False},
     async_processing=True,
 )
 
-# Actualización periódica del banner de alerta en la UI cuando el stream está activo
 if ctx.state.playing and ctx.video_processor:
     while ctx.state.playing:
         active, count, last_ts = ctx.video_processor.get_alert_state()
         if active:
             alert_placeholder.error(
-                f"🚨 **ALERTA ACTIVA:** Se detectó un celular interceptando/dentro del bounding box de una persona ({count} coincidencia(s))."
+                f"🚨 **ALERTA ACTIVA:** Se detectó un celular interceptando el bounding box de una persona ({count} coincidencia(s))."
             )
         else:
             alert_placeholder.success("✅ Sin alertas: no hay intersección activa entre persona y celular.")
