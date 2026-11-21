@@ -6,27 +6,19 @@ import streamlit as st
 from streamlit_webrtc import RTCConfiguration, VideoProcessorBase, webrtc_streamer
 from ultralytics import YOLO
 
-st.set_page_config(page_title="Alerta Persona + Celular (YOLO)", page_icon="🚨", layout="wide")
+st.set_page_config(page_title="Proyecto Aprendizaje Automático", page_icon="📷", layout="wide")
+st.caption("Integrantes: Mayra Castañeda - Andres Torres - Julián Marin")
 
-st.title("🚨 Alerta de Intersección: Persona y Celular con YOLO")
-st.caption("Detecta cuando el bounding box de un celular se intersecta o se ubica dentro del bounding box de una persona.")
+st.title("Identificación de Objetos: Persona, Celular y Gorras")
+st.caption("El proyecto detecta cuando el bounding box de un celular se intersecta o se ubica dentro del bounding box de una persona.")
 
 # Sidebar de configuración
 st.sidebar.header("Configuración del Modelo")
 model_path = st.sidebar.text_input("Ruta o nombre del modelo (.pt)", value="best.pt")
-conf_threshold = st.sidebar.slider("Umbral de confianza (conf)", 0.10, 0.95, 0.40, 0.05)
+conf_threshold = st.sidebar.slider("Umbral de confianza", 0.10, 0.95, 0.40, 0.05)
 img_size = st.sidebar.selectbox("Tamaño de inferencia (imgsz)", [320, 480, 640], index=1)
 
-st.sidebar.header("Regla de Alerta")
-mode_rule = st.sidebar.selectbox(
-    "Condición de coincidencia",
-    options=[
-        "Intersección de cajas (cualquier solapamiento)",
-        "Celular dentro de persona o intersectado",
-        "Centro del celular dentro de la caja de persona",
-    ],
-    index=1,
-)
+st.sidebar.header("Configuración de Intersección")
 min_overlap_ratio = st.sidebar.slider(
     "Solapamiento mínimo del celular (%)",
     min_value=0,
@@ -115,12 +107,9 @@ def check_interaction(person_box, phone_box, rule_name: str, min_phone_overlap_f
     inside_full = is_box_inside(phone_box, person_box)
     inside_center = center_inside(phone_box, person_box)
 
-    if rule_name == "Intersección de cajas (cualquier solapamiento)":
-        matched = has_any_overlap
-    elif rule_name == "Centro del celular dentro de la caja de persona":
-        matched = inside_center and (phone_overlap_frac >= min_phone_overlap_frac)
-    else:  # "Celular dentro de persona o intersectado"
-        matched = has_any_overlap or inside_full or inside_center
+    matched = has_any_overlap
+    matched = inside_center and (phone_overlap_frac >= min_phone_overlap_frac)
+    matched = has_any_overlap or inside_full or inside_center
 
     return matched, inter
 
